@@ -14,7 +14,7 @@ import numpy as np
 class Config:
     
     ## dataset
-    dataset = 'InterHand2.6M' # InterHand2.6M, RHD, STB
+    dataset = 'STB' # InterHand2.6M, RHD, STB
 
     ## input, output
     input_img_shape = (256, 256)
@@ -29,10 +29,10 @@ class Config:
 
     ## training config
     lr_dec_epoch = [15, 17] if dataset == 'InterHand2.6M' else [45,47]
-    end_epoch = 20 if dataset == 'InterHand2.6M' else 50
+    end_epoch = 20 if dataset == 'InterHand2.6M' else 100
     lr = 1e-4
     lr_dec_factor = 10
-    train_batch_size = 16
+    train_batch_size = 64
 
     ## testing config
     test_batch_size = 32

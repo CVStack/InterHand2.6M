@@ -50,7 +50,7 @@ def main():
     tester._make_batch_generator(args.test_set)
     tester._make_model()
     
-    preds = {'joint_coord': [], 'rel_root_depth': [], 'hand_type': [], 'inv_trans': []}
+    preds = {'joint_coord': [], 'inv_trans': []}
     with torch.no_grad():
        for itr, (inputs, targets, meta_info) in enumerate(tqdm(tester.batch_generator)):
             
@@ -58,13 +58,8 @@ def main():
             out = tester.model(inputs, targets, meta_info, 'test')
 
             joint_coord_out = out['joint_coord'].cpu().numpy()
-            rel_root_depth_out = out['rel_root_depth'].cpu().numpy()
-            hand_type_out = out['hand_type'].cpu().numpy()
             inv_trans = out['inv_trans'].cpu().numpy()
-
             preds['joint_coord'].append(joint_coord_out)
-            preds['rel_root_depth'].append(rel_root_depth_out)
-            preds['hand_type'].append(hand_type_out)
             preds['inv_trans'].append(inv_trans)
             
     # evaluate

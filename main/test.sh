@@ -1,0 +1,1 @@
+python test.py --gpu 0 --test_epoch 99 --test_set test

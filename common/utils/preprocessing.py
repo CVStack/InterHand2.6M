@@ -64,10 +64,9 @@ def get_aug_config():
 
     return trans, scale, rot, do_flip, color_scale
 
-def augmentation(img, bbox, joint_coord, joint_valid, hand_type, mode, joint_type):
+def augmentation(img, bbox, joint_coord, mode):
     img = img.copy(); 
     joint_coord = joint_coord.copy(); 
-    hand_type = hand_type.copy();
 
     original_img_shape = img.shape
     joint_num = len(joint_coord)
@@ -84,30 +83,25 @@ def augmentation(img, bbox, joint_coord, joint_valid, hand_type, mode, joint_typ
     
     if do_flip:
         joint_coord[:,0] = original_img_shape[1] - joint_coord[:,0] - 1
-        joint_coord[joint_type['right']], joint_coord[joint_type['left']] = joint_coord[joint_type['left']].copy(), joint_coord[joint_type['right']].copy()
-        joint_valid[joint_type['right']], joint_valid[joint_type['left']] = joint_valid[joint_type['left']].copy(), joint_valid[joint_type['right']].copy()
-        hand_type[0], hand_type[1] = hand_type[1].copy(), hand_type[0].copy()
+
     for i in range(joint_num):
         joint_coord[i,:2] = trans_point2d(joint_coord[i,:2], trans)
-        joint_valid[i] = joint_valid[i] * (joint_coord[i,0] >= 0) * (joint_coord[i,0] < cfg.input_img_shape[1]) * (joint_coord[i,1] >= 0) * (joint_coord[i,1] < cfg.input_img_shape[0])
+        
+    return img, joint_coord, inv_trans
 
-    return img, joint_coord, joint_valid, hand_type, inv_trans
-
-def transform_input_to_output_space(joint_coord, joint_valid, rel_root_depth, root_valid, root_joint_idx, joint_type):
+def transform_input_to_output_space(joint_coord, rel_root_depth, root_valid, root_joint_idx):
     # transform to output heatmap space
-    joint_coord = joint_coord.copy(); joint_valid = joint_valid.copy()
+    joint_coord = joint_coord.copy()
     
     joint_coord[:,0] = joint_coord[:,0] / cfg.input_img_shape[1] * cfg.output_hm_shape[2]
     joint_coord[:,1] = joint_coord[:,1] / cfg.input_img_shape[0] * cfg.output_hm_shape[1]
-    joint_coord[joint_type['right'],2] = joint_coord[joint_type['right'],2] - joint_coord[root_joint_idx['right'],2]
-    joint_coord[joint_type['left'],2] = joint_coord[joint_type['left'],2] - joint_coord[root_joint_idx['left'],2]
-  
+    joint_coord[:,2] = joint_coord[:, 2] - joint_coord[root_joint_idx, 2] 
     joint_coord[:,2] = (joint_coord[:,2] / (cfg.bbox_3d_size/2) + 1)/2. * cfg.output_hm_shape[0]
-    joint_valid = joint_valid * ((joint_coord[:,2] >= 0) * (joint_coord[:,2] < cfg.output_hm_shape[0])).astype(np.float32)
+
     rel_root_depth = (rel_root_depth / (cfg.bbox_3d_size_root/2) + 1)/2. * cfg.output_root_hm_shape
     root_valid = root_valid * ((rel_root_depth >= 0) * (rel_root_depth < cfg.output_root_hm_shape)).astype(np.float32)
     
-    return joint_coord, joint_valid, rel_root_depth, root_valid
+    return joint_coord, rel_root_depth, root_valid
 
 def get_bbox(joint_img, joint_valid):
     x_img = joint_img[:,0][joint_valid==1]; y_img = joint_img[:,1][joint_valid==1];

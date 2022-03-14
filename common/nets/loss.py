@@ -16,26 +16,7 @@ class JointHeatmapLoss(nn.Module):
     def __ini__(self):
         super(JointHeatmapLoss, self).__init__()
 
-    def forward(self, joint_out, joint_gt, joint_valid):
-        loss = (joint_out - joint_gt)**2 * joint_valid[:,:,None,None,None]
-        return loss
-
-class HandTypeLoss(nn.Module):
-    def __init__(self):
-        super(HandTypeLoss, self).__init__()
-
-    def forward(self, hand_type_out, hand_type_gt, hand_type_valid):
-        loss = F.binary_cross_entropy(hand_type_out, hand_type_gt, reduction='none')
-        loss = loss.mean(1)
-        loss = loss * hand_type_valid
-
-        return loss
-
-class RelRootDepthLoss(nn.Module):
-    def __init__(self):
-        super(RelRootDepthLoss, self).__init__()
-
-    def forward(self, root_depth_out, root_depth_gt, root_valid):
-        loss = torch.abs(root_depth_out - root_depth_gt) * root_valid
+    def forward(self, joint_out, joint_gt):
+        loss = (joint_out - joint_gt) ** 2 
         return loss
 

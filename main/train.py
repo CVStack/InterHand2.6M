@@ -73,11 +73,13 @@ def main():
             trainer.read_timer.tic()
         
         # save model
-        trainer.save_model({
+        
+        if (epoch + 1) % 10 == 0:
+            trainer.save_model({
             'epoch': epoch,
             'network': trainer.model.state_dict(),
             'optimizer': trainer.optimizer.state_dict(),
-        }, epoch)
+            }, epoch)
         
 
 if __name__ == "__main__":
