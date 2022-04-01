@@ -102,7 +102,7 @@ class Trainer(Base):
         self.optimizer = optimizer
          
     def save_model(self, state, epoch):
-        file_path = osp.join(cfg.model_dir,'snapshot_{}.pth.tar'.format(str(epoch)))
+        file_path = osp.join(cfg.model_dir, cfg.dataset, 'snapshot_{}.pth.tar'.format(str(epoch)))
         torch.save(state, file_path)
         self.logger.info("Write snapshot into {}".format(file_path))
 
@@ -140,7 +140,7 @@ class Tester(Base):
         self.testset = testset_loader
     
     def _make_model(self):
-        model_path = os.path.join(cfg.model_dir, 'snapshot_%d.pth.tar' % self.test_epoch)
+        model_path = os.path.join(cfg.model_dir, cfg.dataset, 'snapshot_%d.pth.tar' % self.test_epoch)
         assert os.path.exists(model_path), 'Cannot find model at ' + model_path
         self.logger.info('Load checkpoint from {}'.format(model_path))
         

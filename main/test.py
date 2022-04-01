@@ -56,7 +56,6 @@ def main():
             
             # forward
             out = tester.model(inputs, targets, meta_info, 'test')
-
             joint_coord_out = out['joint_coord'].cpu().numpy()
             inv_trans = out['inv_trans'].cpu().numpy()
             preds['joint_coord'].append(joint_coord_out)

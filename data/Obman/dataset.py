@@ -1,93 +1,119 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
-# All rights reserved.
-#
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-#
-
-import numpy as np
-import torch
-import torch.utils.data
-import cv2
 import os
 import os.path as osp
-from config import cfg
-from utils.preprocessing import load_img, load_skeleton, process_bbox, get_aug_config, augmentation, transform_input_to_output_space, generate_patch_image, trans_point2d
-from utils.transforms import world2cam, cam2pixel, pixel2cam
-from utils.vis import vis_keypoints, vis_3d_keypoints
-from PIL import Image, ImageDraw
+import numpy as np
+
+import torch
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+from utils.transforms import *
+from utils.visualization import *
+import cv2
 import random
 import json
+import pickle
 import math
+import copy
 from pycocotools.coco import COCO
+import tqdm
+
+import sys
+
+from config import cfg
+from utils.preprocessing import load_img, process_bbox, process_bbox2, augmentation, transform_input_to_output_space, trans_point2d, load_skeleton
+from utils.transforms import pixel2cam
+from utils.vis import vis_keypoints, vis_3d_keypoints
+
+import os
+import torch.nn.functional as F
+
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, transform, mode):
-        self.mode = mode
-        self.root_path = '/home/user/hspark/InterHand2.6M/data/STB/data'
-        self.rootnet_output_path = '/home/user/hspark/InterHand2.6M/data/STB/rootnet_output/rootnet_stb_output.json'
-        self.original_img_shape = (480, 640) # height, width
+
+    def __init__(self, transform, data_split):
         self.transform = transform
-        self.joint_num = 21 # single hand
-        self.root_joint_idx = 0
-        self.skeleton = load_skeleton(osp.join(self.root_path, 'skeleton.txt'), self.joint_num)
+        self.data_split = data_split
+        self.root_path = osp.join('/home/user/hspark/InterHand2.6M/data/Obman/data')
         
-        self.datalist = [];
-        self.annot_path = osp.join(self.root_path, 'STB_' + self.mode + '.json')
-        db = COCO(self.annot_path)
+        self.joint_num = 21
+        self.root_joint_idx = 0
 
-        if self.mode == 'test' and cfg.trans_test == 'rootnet':
-            print("Get bbox and root depth from " + self.rootnet_output_path)
-            rootnet_result = {}
-            with open(self.rootnet_output_path) as f:
-                annot = json.load(f)
-            for i in range(len(annot)):
-                rootnet_result[str(annot[i]['annot_id'])] = annot[i]
+        self.datalist = self.load_data()
+        self.skeleton = load_skeleton(osp.join(self.root_path, 'skeleton.txt'), self.joint_num)
+        # self.datalist = self.datalist[:256]
+
+    def load_data(self):
+        if self.data_split == 'train':
+            with open(osp.join(self.root_path, 'train/result_training.pickle'), 'rb') as f:
+                data = pickle.load(f)
+                self.data_path = osp.join(self.root_path, 'train', 'rgb')
+        
         else:
-            print("Get bbox and root depth from groundtruth annotation")
+            with open(osp.join(self.root_path, 'test/result_testing.pickle'), 'rb') as f:
+                data = pickle.load(f)
+                self.data_path = osp.join(self.root_path, 'test', 'rgb')
 
-        for aid in db.anns.keys():
-            ann = db.anns[aid]
-            image_id = ann['image_id']
-            img = db.loadImgs(image_id)[0]
-            
-            seq_name = img['seq_name']
-            img_path = osp.join(self.root_path, 'images', seq_name, img['file_name'])
-            img_width, img_height = img['width'], img['height']
-            cam_param = img['cam_param']
-            focal, princpt = np.array(cam_param['focal'],dtype=np.float32), np.array(cam_param['princpt'],dtype=np.float32)
-            
-            joint_img = np.array(ann['joint_img'],dtype=np.float32)
-            joint_cam = np.array(ann['joint_cam'],dtype=np.float32)
-            
-            # transform single hand data to double hand data structure
+        filelist = ["00029634.jpg", "00045305.jpg", "00047433.jpg", "00119666.jpg", "00186570.jpg"]
+        
+        datalist = []
 
-            if self.mode == 'test' and cfg.trans_test == 'rootnet':
-                bbox = np.array(rootnet_result[str(aid)]['bbox'],dtype=np.float32)
-                abs_depth = rootnet_result[str(aid)]['abs_depth']
-            else:
-                bbox = np.array(ann['bbox'],dtype=np.float32) # x,y,w,h
-                bbox = process_bbox(bbox, (img_height, img_width))
-                abs_depth = joint_cam[self.root_joint_idx,2] # single hand abs depth
+        for idx in tqdm.tqdm(range(len(data['annotations']))):
+            ann = data['annotations'][idx]
+            img = data['images'][idx]
+
+            image_id = img['id']
+            img_path = osp.join(self.data_path, img['file_name'])
+
+            if not osp.exists(img_path) or img['file_name'] in filelist:
+                continue
+
+            img_shape = (img['height'], img['width'])
+            cam_param, joint_cam, joint_img = img['param'], ann['xyz'], ann['uvd']
+            focal, princpt = np.array([cam_param[0,0], cam_param[1,1]],dtype=np.float32), np.array([cam_param[0,2], cam_param[1,2]],dtype=np.float32)
+            # joint_cam = pixel2cam(joint_img, focal, princpt)
+
+            # bbox = ann['bbox']
+            bbox = process_bbox2(joint_img)
             
+            if True in ((joint_img[:, :2] < 0) | (joint_img[:, :2] > img_shape[0])):
+                continue           
+            if (bbox[0] < 0) or (bbox[0] + bbox[2] > img['width']) or (bbox[1] < 0) or (bbox[1] + bbox[3] > img['height']):
+                continue
+            # if True in ((joint_img[:, 0] < 0) | (joint_img[:, 0] > img_shape[1])):
+            #     continue
+            # if True in ((joint_img[:, 1] < 0) | (joint_img[:, 1] > img_shape[0])):
+            #     continue
+
+            if bbox is None: continue
+            abs_depth = joint_cam[0,2]
+            side = ann['side']
+
             cam_param = {'focal': focal, 'princpt': princpt}
             joint = {'cam_coord': joint_cam, 'img_coord': joint_img}
-            data = {'img_path': img_path, 'bbox': bbox, 'cam_param': cam_param, 'joint': joint, 'abs_depth': abs_depth}
-            self.datalist.append(data)
-  
+            elem = {'img_path': img_path, 'bbox': bbox, 'cam_param': cam_param, 'joint': joint, 'abs_depth': abs_depth, 'side' : side, 'img_shape': img_shape}
+
+            datalist.append(elem)
+        return datalist
+    
     def __len__(self):
         return len(self.datalist)
+
     
     def __getitem__(self, idx):
-        data = self.datalist[idx]
+        data = copy.deepcopy(self.datalist[idx])
         img_path, bbox, joint = data['img_path'], data['bbox'], data['joint']
-        joint_cam = joint['cam_coord'].copy(); joint_img = joint['img_coord'].copy()
-        joint_coord = np.concatenate((joint_img, joint_cam[:,2,None]),1)
+        height, width = data['img_shape']
+        joint_coord = joint['img_coord'].copy()
+        side = data['side']
 
-        # image load
+        # img, mask laod     
         img = load_img(img_path)
-        # augmentation
-        img, joint_coord, inv_trans = augmentation(img, bbox, joint_coord, self.mode)
+
+        if side == 'left':
+            img = cv2.flip(img, 1)
+            joint[:, 0] = width - joint_coord[:, 0]
+            bbox[0] = width - bbox[0] - bbox[2]
+
+        img, joint_coord, inv_trans = augmentation(img, bbox, joint_coord, self.data_split)
         img = self.transform(img.astype(np.float32))/255.
         rel_root_depth = np.zeros((1),dtype=np.float32)
         root_valid = np.zeros((1),dtype=np.float32)
@@ -97,7 +123,9 @@ class Dataset(torch.utils.data.Dataset):
         inputs = {'img': img}
         targets = {'joint_coord': joint_coord, 'rel_root_depth': rel_root_depth}
         meta_info = {'root_valid': root_valid, 'inv_trans': inv_trans}
+
         return inputs, targets, meta_info
+
 
     def evaluate(self, preds):
 
@@ -162,11 +190,11 @@ class Dataset(torch.utils.data.Dataset):
         for j in range(self.joint_num):
             mpjpe[j] = np.mean(np.stack(mpjpe[j]))
             joint_name = self.skeleton[j]['name']
-            eval_summary += (joint_name + ': %.2f, ' % mpjpe[j])
+            eval_summary += (joint_name + ': %.2f, ' % (mpjpe[j] * 1000))
 
         print(eval_summary)
-        print('MPJPE: %.2f' % (np.mean(mpjpe)))
-        print('x_MPJPE: %.2f' % (np.mean(x_mpjpe)))
-        print('y_MPJPE: %.2f' % (np.mean(y_mpjpe)))
-        print('z_MPJPE: %.2f' % (np.mean(z_mpjpe)))
-
+        print('MPJPE: %.2f' % (np.mean(mpjpe) * 1000))
+        print('x_MPJPE: %.2f' % (np.mean(x_mpjpe) * 1000))
+        print('y_MPJPE: %.2f' % (np.mean(y_mpjpe) * 1000))
+        print('z_MPJPE: %.2f' % (np.mean(z_mpjpe) * 1000))
+    

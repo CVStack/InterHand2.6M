@@ -137,6 +137,28 @@ def process_bbox(bbox, original_img_shape):
 
     return bbox
 
+def process_bbox2(joint_coord):
+    
+    min_x, max_x = np.min(joint_coord[:, 0]), np.max(joint_coord[:, 0])
+    min_y, max_y = np.min(joint_coord[:, 1]), np.max(joint_coord[:, 1])
+
+    width = max_x - min_x
+    height = max_y - min_y
+    
+    center_x, center_y = min_x + width/2, min_y + height/2
+
+    width *= 1.5
+    height *= 1.5
+
+    if width > height:
+        height = width
+    else:
+        width = height
+
+    x, y = center_x - width / 2, center_y - height / 2
+
+    return np.array([x, y, width, height])
+    
 def generate_patch_image(cvimg, bbox, do_flip, scale, rot, out_shape):
     img = cvimg.copy()
     img_height, img_width, img_channels = img.shape

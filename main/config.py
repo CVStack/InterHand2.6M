@@ -14,14 +14,14 @@ import numpy as np
 class Config:
     
     ## dataset
-    dataset = 'STB' # InterHand2.6M, RHD, STB
+    dataset = 'Obman' # RHD, STB, Obman
 
     ## input, output
     input_img_shape = (256, 256)
     output_hm_shape = (64, 64, 64) # (depth, height, width)
     sigma = 2.5
-    bbox_3d_size = 400 # depth axis
-    bbox_3d_size_root = 400 # depth axis
+    bbox_3d_size = 0.4 # depth axis, STB: 400, Obman: 0.4
+    bbox_3d_size_root = 0.4 # depth axis
     output_root_hm_shape = 64 # depth axis
 
     ## model
@@ -49,7 +49,7 @@ class Config:
     result_dir = osp.join(output_dir, 'result')
 
     ## others
-    num_thread = 40
+    num_thread = 4
     gpu_ids = '0'
     num_gpus = 1
     continue_train = False

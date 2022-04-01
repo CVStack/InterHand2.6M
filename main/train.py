@@ -76,10 +76,10 @@ def main():
         
         if (epoch + 1) % 10 == 0:
             trainer.save_model({
-            'epoch': epoch,
+            'epoch': epoch + 1,
             'network': trainer.model.state_dict(),
             'optimizer': trainer.optimizer.state_dict(),
-            }, epoch)
+            }, epoch + 1)
         
 
 if __name__ == "__main__":
